@@ -1,11 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from markitdown import MarkItDown
 import tempfile
 import os
 
 app = FastAPI(title="MarkItDown Converter API")
 md = MarkItDown()
+
+app.mount("/static", StaticFiles(directory="."), name="static")
 
 @app.get("/")
 async def serve_frontend():
