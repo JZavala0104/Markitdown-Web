@@ -27,5 +27,26 @@ jobs:
       with:
         context: .
         push: true
-        # GitHub requiere que el nombre de usuario esté en minúsculas
+
         tags: ghcr.io/jzavala0104/markitdown-web:latest
+
+  deploy-to-vm:
+    needs: build-and-push 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conectar a la VM por SSH y desplegar
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # 1. Detener y eliminar el contenedor viejo si existe
+            docker stop markitdown-app || true
+            docker rm markitdown-app || true
+            
+            # 2. Descargar la imagen pública más reciente que acaba de crear GitHub
+            docker pull ghcr.io/jzavala0104/markitdown-web:latest
+            
+            # 3. Levantar el nuevo contenedor mapeando el puerto 8000
+            docker run -d -p 8000:8000 --name markitdown-app ghcr.io/jzavala0104/markitdown-web:latest
