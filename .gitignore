@@ -1,0 +1,19 @@
+# Entornos virtuales
+venv/
+env/
+.env
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+
+# Archivos del IDE
+.vscode/
+.idea/
+
+# Evitar subir archivos temporales que hayas usado para pruebas locales
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+*.md

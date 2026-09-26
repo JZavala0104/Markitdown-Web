@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convert to Markdown</title>
+    <style>@import url('style.css');</style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>Convert to Markdown</h2>
+        <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.pptx">
+        <button id="convertBtn">Procesar y Convertir</button>
+        <button id="downloadBtn">Descargar Archivo .md</button>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        let currentMarkdown = "";
+        let originalFilename = "";
+
+        document.getElementById('convertBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('fileInput');
+            const statusText = document.getElementById('status');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const convertBtn = document.getElementById('convertBtn');
+
+            if (!fileInput.files.length) {
+                statusText.textContent = "Por favor, sube un archivo primero.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+
+            statusText.textContent = "Procesando...";
+            convertBtn.disabled = true;
+            downloadBtn.style.display = "none";
+
+            try {
+                const response = await fetch('/api/convert', { method: 'POST', body: formData });
+                if (!response.ok) throw new Error("Error procesando el archivo.");
+
+                const data = await response.json();
+                currentMarkdown = data.markdown_content;
+
+                // Reemplazar la extensión original (.pdf, etc) por .md
+                originalFilename = data.filename.replace(/\.[^/.]+$/, "") + ".md";
+
+                statusText.textContent = "¡Conversión exitosa!";
+                downloadBtn.style.display = "block";
+            } catch (error) {
+                statusText.textContent = error.message;
+            } finally {
+                convertBtn.disabled = false;
+            }
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            // Crear el archivo en memoria y forzar la descarga
+            const blob = new Blob([currentMarkdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = originalFilename; // Ejemplo: CV_Jose_Zavala_practicant.md
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
