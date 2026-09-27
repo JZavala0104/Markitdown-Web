@@ -41,12 +41,20 @@ jobs:
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 1. Detener y eliminar el contenedor viejo si existe
-            docker stop markitdown-app || true
-            docker rm markitdown-app || true
+            # 1. Detener y limpiar contenedores anteriores
+            docker stop markitdown-app caddy || true
+            docker rm markitdown-app caddy || true
             
-            # 2. Descargar la imagen pública más reciente que acaba de crear GitHub
+            # 2. Crear una red virtual para que los contenedores se comuniquen
+            docker network create webnet || true
+            
+            # 3. Descargar la última versión de tu app
             docker pull ghcr.io/jzavala0104/markitdown-web:latest
             
-            # 3. Levantar el nuevo contenedor mapeando el puerto 8000
-            docker run -d -p 80:8000 --name markitdown-app ghcr.io/jzavala0104/markitdown-web:latest
+            # 4. Levantar tu app en la red interna (Ya no exponemos el puerto 80 aquí)
+            docker run -d --name markitdown-app --network webnet ghcr.io/jzavala0104/markitdown-web:latest
+            
+            # 5. Levantar Caddy Server configurado con tu subdominio
+            docker run -d --name caddy -p 80:80 -p 443:443 --network webnet \
+              -v caddy_data:/data \
+              caddy caddy reverse-proxy --from markdown.jogzar.com --to markitdown-app:8000
