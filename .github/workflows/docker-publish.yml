@@ -49,4 +49,4 @@ jobs:
             docker pull ghcr.io/jzavala0104/markitdown-web:latest
             
             # 3. Levantar el nuevo contenedor mapeando el puerto 8000
-            docker run -d -p 8000:8000 --name markitdown-app ghcr.io/jzavala0104/markitdown-web:latest
+            docker run -d -p 80:8000 --name markitdown-app ghcr.io/jzavala0104/markitdown-web:latest

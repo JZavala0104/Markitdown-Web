@@ -11,35 +11,131 @@
 <body>
 
     <div class="card">
-        <h2>Convert to Markdown</h2>
-        <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.pptx">
-        <button id="convertBtn">Procesar y Convertir</button>
-        <button id="downloadBtn">Descargar Archivo .md</button>
-        <p id="status"></p>
+        <div class="card-header">
+            <h2>Convert to Markdown</h2>
+        </div>
+
+        <!-- Zona de Drag & Drop -->
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#007bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+            </div>
+            <p>Arrastra y suelta tu archivo aquí o <span class="text-primary">Elige un archivo</span></p>
+            <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.pptx" hidden>
+        </div>
+
+        <!-- Textos de soporte -->
+        <div class="info-row">
+            <span>Formatos soportados: PDF, DOCX, XLSX, PPTX</span>
+            <span>Tamaño máximo: 25MB</span>
+        </div>
+
+        <!-- Vista previa del archivo seleccionado (oculto por defecto) -->
+        <div id="filePreview" class="file-preview hidden">
+            <div class="file-info">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#28a745" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <span id="fileName" class="file-name">documento.pdf</span>
+            </div>
+            <button id="removeFileBtn" class="icon-btn" title="Quitar archivo">✕</button>
+        </div>
+
+        <!-- Footer con botones -->
+        <div class="footer-actions">
+            <p id="status"></p>
+            <div class="buttons-container">
+                <button id="downloadBtn" class="btn btn-success hidden">Descargar .md</button>
+                <button id="convertBtn" class="btn btn-primary" disabled>Procesar y Convertir</button>
+            </div>
+        </div>
     </div>
 
     <script>
         let currentMarkdown = "";
         let originalFilename = "";
 
-        document.getElementById('convertBtn').addEventListener('click', async () => {
-            const fileInput = document.getElementById('fileInput');
-            const statusText = document.getElementById('status');
-            const downloadBtn = document.getElementById('downloadBtn');
-            const convertBtn = document.getElementById('convertBtn');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const filePreview = document.getElementById('filePreview');
+        const fileNameDisplay = document.getElementById('fileName');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+        const convertBtn = document.getElementById('convertBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const statusText = document.getElementById('status');
 
-            if (!fileInput.files.length) {
-                statusText.textContent = "Por favor, sube un archivo primero.";
-                return;
+        // --- Lógica de la interfaz gráfica ---
+
+        // Abrir el selector de archivos al hacer clic en la zona punteada
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Efectos visuales al arrastrar
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
             }
+        });
+
+        // Detectar cuando se selecciona un archivo
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDisplay.textContent = file.name;
+                dropZone.classList.add('hidden');
+                filePreview.classList.remove('hidden');
+                convertBtn.disabled = false;
+                statusText.textContent = "";
+                downloadBtn.classList.add('hidden');
+            }
+        }
+
+        // Quitar el archivo seleccionado
+        removeFileBtn.addEventListener('click', () => {
+            fileInput.value = "";
+            dropZone.classList.remove('hidden');
+            filePreview.classList.add('hidden');
+            convertBtn.disabled = true;
+            statusText.textContent = "";
+            downloadBtn.classList.add('hidden');
+        });
+
+
+        // --- Lógica de Conversión al Backend ---
+
+        convertBtn.addEventListener('click', async () => {
+            if (!fileInput.files.length) return;
 
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append("file", file);
 
             statusText.textContent = "Procesando...";
+            statusText.style.color = "#555";
             convertBtn.disabled = true;
-            downloadBtn.style.display = "none";
+            removeFileBtn.disabled = true;
+            downloadBtn.classList.add('hidden');
 
             try {
                 const response = await fetch('/api/convert', { method: 'POST', body: formData });
@@ -47,26 +143,26 @@
 
                 const data = await response.json();
                 currentMarkdown = data.markdown_content;
-
-                // Reemplazar la extensión original (.pdf, etc) por .md
                 originalFilename = data.filename.replace(/\.[^/.]+$/, "") + ".md";
 
                 statusText.textContent = "¡Conversión exitosa!";
-                downloadBtn.style.display = "block";
+                statusText.style.color = "#28a745";
+                downloadBtn.classList.remove('hidden');
             } catch (error) {
                 statusText.textContent = error.message;
+                statusText.style.color = "#dc3545";
             } finally {
                 convertBtn.disabled = false;
+                removeFileBtn.disabled = false;
             }
         });
 
-        document.getElementById('downloadBtn').addEventListener('click', () => {
-            // Crear el archivo en memoria y forzar la descarga
+        downloadBtn.addEventListener('click', () => {
             const blob = new Blob([currentMarkdown], { type: 'text/markdown' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = originalFilename; // Ejemplo: CV_Jose_Zavala_practicant.md
+            a.download = originalFilename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
