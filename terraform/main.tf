@@ -1,8 +1,8 @@
 terraform {
   required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
     }
     tls = {
       source  = "hashicorp/tls"
@@ -11,142 +11,126 @@ terraform {
   }
 }
 
-provider "azurerm" {
-  features {}
+provider "aws" {
+  region = "us-east-2"
+  profile = "default"
 }
 
-# 1. Grupo de Recursos (Usamos East US por ser cuenta educativa)
-resource "azurerm_resource_group" "rg" {
-  name     = "rg-markitdown"
-  location = "brazilsouth"
+# 1. Red (VPC) y Subred Pública
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 }
 
-# 2. Red Virtual y Subred
-resource "azurerm_virtual_network" "vnet" {
-  name                = "vnet-markitdown"
-  address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
 }
 
-resource "azurerm_subnet" "subnet" {
-  name                 = "subnet-markitdown"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.1.0/24"]
-}
-
-# 3. IP Pública
-resource "azurerm_public_ip" "public_ip" {
-  name                = "ip-markitdown"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  allocation_method   = "Static"
-}
-
-# 4. Grupo de Seguridad (Firewall)
-resource "azurerm_network_security_group" "nsg" {
-  name                = "nsg-markitdown"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-
-  security_rule {
-    name                       = "SSH"
-    priority                   = 1001
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "HTTP_8000"
-    priority                   = 1002
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "8000"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
   }
 }
 
-# 5. Interfaz de Red (NIC)
-resource "azurerm_network_interface" "nic" {
-  name                = "nic-markitdown"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "aws_subnet" "public_subnet" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "us-east-2a"
+}
 
-  ip_configuration {
-    name                          = "internal"
-    subnet_id                     = azurerm_subnet.subnet.id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.public_ip.id
+resource "aws_route_table_association" "a" {
+  subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+# 2. Grupo de Seguridad (Firewall)
+resource "aws_security_group" "sg" {
+  name        = "markitdown-sg"
+  description = "Permitir SSH y puerto 8000"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "nic_nsg" {
-  network_interface_id      = azurerm_network_interface.nic.id
-  network_security_group_id = azurerm_network_security_group.nsg.id
-}
-
-# 6. Generación de Llave SSH Automática
+# 3. Generación de Llave SSH
 resource "tls_private_key" "ssh_key" {
   algorithm = "RSA"
   rsa_bits  = 4096
 }
 
-# 7. Máquina Virtual Ubuntu
-resource "azurerm_linux_virtual_machine" "vm" {
-  name                = "vm-markitdown"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = "Standard_B1s"
-  admin_username      = "devopsuser"
-  network_interface_ids = [
-    azurerm_network_interface.nic.id,
-  ]
+resource "aws_key_pair" "deployer" {
+  key_name   = "markitdown-key"
+  public_key = tls_private_key.ssh_key.public_key_openssh
+}
 
-  admin_ssh_key {
-    username   = "devopsuser"
-    public_key = tls_private_key.ssh_key.public_key_openssh
+# 4. Encontrar la última imagen oficial de Ubuntu 22.04
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+  
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
 
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
-  }
-
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts"
-    version   = "latest"
-  }
+# 5. Máquina Virtual EC2
+resource "aws_instance" "vm" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.public_subnet.id
+  vpc_security_group_ids = [aws_security_group.sg.id]
+  key_name               = aws_key_pair.deployer.key_name
 
   # Instala Docker automáticamente al encender
-  custom_data = base64encode(<<-EOF
+  user_data = <<-EOF
               #!/bin/bash
               apt-get update
               apt-get install -y docker.io
               systemctl start docker
               systemctl enable docker
-              usermod -aG docker devopsuser
+              usermod -aG docker ubuntu
               EOF
-  )
+
+  tags = {
+    Name = "vm-markitdown"
+  }
 }
 
-# 8. Outputs (Lo que necesitamos para GitHub)
+# 6. Outputs para GitHub Actions
 output "vm_public_ip" {
-  value = azurerm_public_ip.public_ip.ip_address
+  value = aws_instance.vm.public_ip
 }
 
 output "vm_username" {
-  value = azurerm_linux_virtual_machine.vm.admin_username
+  value = "ubuntu"
 }
 
 output "tls_private_key" {
