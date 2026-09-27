@@ -18,7 +18,7 @@ provider "azurerm" {
 # 1. Grupo de Recursos (Usamos East US por ser cuenta educativa)
 resource "azurerm_resource_group" "rg" {
   name     = "rg-markitdown"
-  location = "eastus"
+  location = "brazilsouth"
 }
 
 # 2. Red Virtual y Subred
